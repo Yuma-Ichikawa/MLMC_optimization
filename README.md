@@ -4,8 +4,6 @@ Code and data for the paper "Demonstrating Real Advantage of Machine-Learning-En
 - The Data directory conntains the data supporting the results in the paper. The Alpha subdirectory contains the spin interaction files (saved as "spin1 spin2 interaction"), while the Omega subdirectory contains the results of the runs of the annealings
 - The Plots directory contains the both the code for producing the plots and the plots themselves.
 
-I you use the contents of this repository, please cite:
-
 ## Citation
 
 If you use this code, please cite the corresponding paper:
