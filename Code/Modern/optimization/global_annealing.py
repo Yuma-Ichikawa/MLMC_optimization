@@ -50,7 +50,7 @@ def MLMC_fast(model, data, beta, N, J,  num_steps = 10, return_correlations = Fa
     else:
         return current_config, acc_rates
 
-def sequential_tempering(L, J, pop_size, num_steps_MC, swap_step, N, Tstart, Tend, Observables,
+def global_annealing(L, J, pop_size, num_steps_MC, swap_step, N, Tstart, Tend, Observables,
                                 schedule = "Cv_beta", num_temps_determiner = 0.5, 
                                 high_temp_thermalization_steps = 200, batch_size = 256, 
                                 num_epochs_start = 40, num_epochs_retrain = 1, dimension = "3d"):
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
 
 
-    temperatures, observ, elapsed_time = sequential_tempering(L, J, pop_size, MLMCsteps, MCsteps,N,  Tstart,
+    temperatures, observ, elapsed_time = global_annealing(L, J, pop_size, MLMCsteps, MCsteps,N,  Tstart,
                                                                                        Tend,  Observables, schedule = schedule,                                                                                                                                                             
                                                                                        num_epochs_start = num_epochs_start,
                                                                                        num_epochs_retrain = num_epochs_retrain,
