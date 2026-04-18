@@ -302,6 +302,7 @@ python average_L10_median.py        # for example
 | `FileNotFoundError: Data/Alpha/Couplings/...` | Script was launched from the repo root. | Use `sbatch scripts/...` (handles the cd), or run the `python ...` command from `Code/Modern/optimization/`. |
 | `ModuleNotFoundError: geometry` / `utilities` / `made` | The submodule was not cloned. | `git submodule update --init --recursive` (or re-clone with `--recurse-submodules`). |
 | Runtime ≫ expected | You accidentally picked the CPU wheel. | `uv run python -c "import torch; print(torch.version.cuda)"` should show `12.8`. Re-run `uv sync`. |
+| `CUDA error 802: system not yet initialized` | NVSwitch fabric-manager on the allocated node is not up (seen occasionally on B200 systems just after reboot). `nvidia-smi` still works, but `cudaGetDeviceCount` fails. | Ask the cluster admin to `systemctl start nvidia-fabricmanager` on that node, or resubmit excluding it: `sbatch --exclude=<node> scripts/smoketest.sbatch`. |
 
 ---
 
