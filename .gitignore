@@ -16,6 +16,13 @@ slurm-*.err
 smoketest_*.out
 smoketest_*.err
 
+# Reproduction pipeline:
+#   - logs are noisy SLURM stdout/stderr: ignore
+#   - fresh_runs/ CSVs are small reproduction artifacts: track them
+#   - figures/ PNGs and PDFs are verified reproduction outputs: track them
+Reproduction/logs/*
+!Reproduction/logs/.gitkeep
+
 # OS / editor cruft
 .DS_Store
 .idea/
@@ -23,3 +30,6 @@ smoketest_*.err
 
 # Ad-hoc scratch
 *.log
+
+# Personal task tracking (user workflow files, not part of the fork)
+tasks/

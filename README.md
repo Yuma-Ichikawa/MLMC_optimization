@@ -16,8 +16,11 @@ This fork adds a **fully reproducible setup** on top of the original
 * this README, which walks a third-party user from `git clone` to a
   green smoke test in under five minutes.
 
-The upstream `Code/`, `Data/` and `Plots/` directories are **untouched**:
-everything here is additive.
+The upstream `Code/` and `Data/` directories are **untouched**: everything
+here is additive. The original `Plots/` directory has been removed in this
+fork — third-party reproduction should run the pipeline in `Reproduction/`
+and render figures from its fresh CSV outputs rather than re-plotting
+paper-shipped data.
 
 ---
 
@@ -47,9 +50,14 @@ mlmc_optimization/
 │       ├── multiple_instances_GStest_L10/
 │       ├── multiple_instances_L10/
 │       └── multiple_instances_L14/
-├── Plots/
-│   ├── Code_for_plots_paper/         # matplotlib scripts that generate the figures
-│   └── Figures_paper/                # rendered PDFs / PNGs
+├── Reproduction/                     # third-party reproduction pipeline (added)
+│   ├── README.md                     # step-by-step reproduction guide
+│   ├── code/                         # generate_coupling.py, run_sweep.py, plot_*
+│   ├── scripts/                      # sweep sbatch launchers
+│   ├── speedups/                     # opt-in optimised kernels + equivalence tests
+│   ├── fresh_runs/                   # CSV outputs of the sweeps
+│   ├── figures/                      # figures rendered from fresh_runs/
+│   └── logs/                         # SLURM stdout (gitignored)
 ├── scripts/                          # SLURM entry points (added by this fork)
 │   ├── smoketest.sbatch              # ~2 min end-to-end sanity check
 │   ├── run_simulated_annealing.sbatch
@@ -279,17 +287,24 @@ runs used as ground truth.
 
 ---
 
-## 7. Plots
+## 7. Reproducing paper figures from scratch
 
-The scripts under `Plots/Code_for_plots_paper/` regenerate the paper
-figures from the CSVs in `Data/Omega/`. They require only matplotlib,
-numpy, scipy, pandas — all already pulled in by `uv sync`:
+This fork deliberately ships **no pre-rendered figures**. The
+`Reproduction/` directory contains a self-contained pipeline that
+builds them on demand from fresh simulation output. A top-level
+`Makefile` wraps every step:
 
 ```bash
-source .venv/bin/activate
-cd Plots/Code_for_plots_paper
-python average_L10_median.py        # for example
+make sweep-l10-all     # easy (seed 1736329224) + hard (seed 310411727)
+make verify-bench      # bit-identical equivalence + speedup benchmark
+make plots             # figures/success_vs_time_L10_{easy,hard}.png
 ```
+
+See `Reproduction/README.md` for the full workflow, file-by-file
+breakdown, parameter table and verification checklist. Optional
+drop-in optimised GPU kernels with an automated equivalence test live
+under `Reproduction/speedups/` and are enabled by
+`run_sweep.py --optimized`.
 
 ---
 
