@@ -1,0 +1,56 @@
+[project]
+name = "mlmc-optimization"
+version = "0.1.0"
+description = "Reproducible environment for 'Demonstrating Real Advantage of Machine-Learning-Enhanced Monte Carlo for Combinatorial Optimization' (Del Bono, Ricci-Tersenghi, Zamponi; arXiv:2510.19544)."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "See upstream repository" }
+authors = [
+    { name = "Luca Maria Del Bono" },
+    { name = "Federico Ricci-Tersenghi" },
+    { name = "Francesco Zamponi" },
+]
+
+# All numerical work happens on CUDA. Versions are pinned so that any B200 / H100 /
+# A100 user who runs `uv sync` gets the exact same wheels we tested with.
+dependencies = [
+    "torch==2.11.0+cu128",
+    "numpy>=2.0,<3",
+    "tqdm>=4.67",
+    "scipy>=1.13",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
+    "networkx>=3.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# This is a research scaffold, not a distributable package. Point hatch at an
+# existing directory so it can resolve a build target without shipping code.
+packages = ["Code"]
+
+# ---------------------------------------------------------------------------
+# uv-specific configuration
+# ---------------------------------------------------------------------------
+# PyTorch ships CUDA 12.8 wheels (required for Blackwell / sm_100 on B200) on
+# its own index. We mark the index as `explicit` so uv only hits it for torch,
+# and everything else resolves from PyPI.
+
+[tool.uv]
+# This project only targets Linux + CUDA 12.8 (B200 / H100 / A100 clusters).
+# Without this clamp, uv tries to resolve a platform split for macOS/Windows
+# where `torch==X+cu128` does not exist and fails.
+environments = ["sys_platform == 'linux'"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
