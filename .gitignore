@@ -8,8 +8,9 @@ __pycache__/
 build/
 dist/
 
-# SLURM / experiment logs
-scripts/logs/
+# SLURM / experiment logs: keep the directory, ignore its contents
+scripts/logs/*
+!scripts/logs/.gitkeep
 slurm-*.out
 slurm-*.err
 smoketest_*.out

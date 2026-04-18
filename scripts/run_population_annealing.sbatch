@@ -13,9 +13,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${REPO_ROOT}"
+if [[ ! -f pyproject.toml || ! -d Code/Modern/optimization ]]; then
+    echo "[FATAL] Expected repo root (got: ${REPO_ROOT}). Run: sbatch scripts/run_population_annealing.sbatch" >&2
+    exit 1
+fi
 mkdir -p scripts/logs
 # shellcheck disable=SC1091
 source .venv/bin/activate

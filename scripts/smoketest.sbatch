@@ -19,11 +19,19 @@
 
 set -euo pipefail
 
-# Resolve repo root from the location of this script so the job works no
-# matter where sbatch was invoked from.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# SLURM copies the job script to a spool directory before running it, so we
+# cannot rely on $BASH_SOURCE to locate the repo. Instead, require that
+# sbatch was invoked from the repository root and use SLURM_SUBMIT_DIR,
+# falling back to the current working directory for interactive use.
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${REPO_ROOT}"
+
+# Sanity check: make sure we landed in the right place.
+if [[ ! -f pyproject.toml || ! -d Code/Modern/optimization ]]; then
+    echo "[FATAL] Expected to run from the repository root (found: ${REPO_ROOT})." >&2
+    echo "        Invoke as: (from repo root) 'sbatch scripts/smoketest.sbatch'" >&2
+    exit 1
+fi
 
 mkdir -p scripts/logs
 
