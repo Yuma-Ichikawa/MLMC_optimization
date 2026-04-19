@@ -28,10 +28,10 @@ from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit
 from scipy.special import expit
 
-ALG_ORDER = ["SA", "PA", "GA"]
-ALG_COLOR = {"SA": "#38b000", "PA": "#d62828", "GA": "#2a6df4"}
-ALG_LABEL = {"SA": "SA", "PA": "PA", "GA": r"$\mathrm{GA}_{15}$"}
-ALG_MARKER = {"SA": "o", "PA": "s", "GA": "^"}
+ALG_ORDER = ["SA", "PA", "GA", "QQA"]
+ALG_COLOR = {"SA": "#38b000", "PA": "#d62828", "GA": "#2a6df4", "QQA": "#9b5de5"}
+ALG_LABEL = {"SA": "SA", "PA": "PA", "GA": r"$\mathrm{GA}_{15}$", "QQA": "PQQA"}
+ALG_MARKER = {"SA": "o", "PA": "s", "GA": "^", "QQA": "D"}
 
 
 def logistic_norm(x, A, B):
@@ -110,16 +110,21 @@ def compute_stats(df, mec):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--csv", type=Path, required=True)
+    ap.add_argument("--csv", type=Path, nargs="+", required=True,
+                    help="One or more CSVs produced by run_sweep.py / "
+                         "run_qqa_sweep.py. Rows are merged by algorithm.")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--title", type=str,
                     default="L=10 easy instance (seed 1736329224) – $M=2^{13}$ population")
     ap.add_argument("--mec", type=float, default=None,
                     help="Reference minimum energy. Default: min across all runs.")
+    ap.add_argument("--schedule-note", type=str,
+                    default=r"SA/PA/GA schedule = $\log T$,  $T\in[0.1,1.92]$",
+                    help="Small legend-footer blurb describing the schedule.")
     args = ap.parse_args()
 
     style()
-    df = pd.read_csv(args.csv)
+    df = pd.concat([pd.read_csv(p) for p in args.csv], ignore_index=True)
     mec = float(df["min_energy"].min()) if args.mec is None else args.mec
     print(f"[plot] best energy observed across all runs: {mec:.10f}")
     stats = compute_stats(df, mec)
@@ -169,7 +174,7 @@ def main():
 
     ax.text(0.01, -0.18,
             f"MEC = {mec:.4f}  |  {int(stats['n_runs'].max())} runs / configuration"
-            "   |   schedule = $\\log T$,  $T\\in[0.1,1.92]$",
+            f"   |   {args.schedule_note}",
             transform=ax.transAxes, ha="left", va="top",
             fontsize=9, color="#606060")
 

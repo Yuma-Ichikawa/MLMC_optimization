@@ -7,9 +7,11 @@ EASY_SEED := 1736329224
 HARD_SEED := 310411727
 EASY_CSV := Reproduction/fresh_runs/sweep_L10_seed$(EASY_SEED).csv
 HARD_CSV := Reproduction/fresh_runs/sweep_L10_seed$(HARD_SEED).csv
+PQQA_CSV := Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv
 
 .PHONY: help install smoke sweep-l6 sweep-l10-easy sweep-l10-hard \
-        sweep-l10-all verify-bench plot-easy plot-hard plots clean-figures
+        sweep-l10-all verify-bench plot-easy plot-hard plots clean-figures \
+        pqqa-winner plot-pqqa-vs-ga test-mc-polish
 
 help:
 	@echo "Entry points (see Reproduction/README.md for the full story):"
@@ -24,6 +26,13 @@ help:
 	@echo "  make plot-easy        render figures/success_vs_time_L10_easy.png"
 	@echo "  make plot-hard        render figures/success_vs_time_L10_hard.png"
 	@echo "  make plots            render both figures"
+	@echo
+	@echo "  --- PQQA (Parallel Quasi-Quantum Annealing) winner ----"
+	@echo "  make pqqa-winner      submit the winning PQQA config (n=50, ~30 min)"
+	@echo "                        100% success @ 36.27 s vs GA's 47.73 s"
+	@echo "  make plot-pqqa-vs-ga  render figures/pqqa_vs_ga_pareto_L10_hard.png"
+	@echo "  make test-mc-polish   CPU bit-equivalence test for the fp32 path"
+	@echo
 	@echo "  make clean-figures    rm Reproduction/figures/*.{png,pdf,stats.csv}"
 
 install:
@@ -59,6 +68,20 @@ plot-hard: $(HARD_CSV)
 	    --title "L=10 hard instance (seed $(HARD_SEED)) – $$M=2^{13}$$ population"
 
 plots: plot-easy plot-hard
+
+# --- PQQA winner over GA -----------------------------------------------------
+
+pqqa-winner:
+	$(SUBMIT) Reproduction/scripts/qqa_winner_run.sbatch
+
+plot-pqqa-vs-ga: $(HARD_CSV) $(PQQA_CSV)
+	$(PY) Reproduction/code/plot_pqqa_winner.py \
+	    --baseline-csv $(HARD_CSV) \
+	    --winner-csv   $(PQQA_CSV) \
+	    --out          Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png
+
+test-mc-polish:
+	$(PY) Reproduction/code/test_mc_polish_correctness.py
 
 clean-figures:
 	rm -f Reproduction/figures/*.png \

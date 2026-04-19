@@ -298,6 +298,11 @@ single GPU. A top-level `Makefile` wraps every step:
 make sweep-l10-all     # easy (seed 1736329224) + hard (seed 310411727)
 make verify-bench      # bit-identical equivalence + speedup benchmark
 make plots             # figures/success_vs_time_L10_{easy,hard}.png
+
+# Beat GA on the hard instance with Parallel Quasi-Quantum Annealing (PQQA).
+# See Reproduction/README.md §4 for the full story, math, and hyperparameters.
+make pqqa-winner       # 100% success @ 36.27s vs GA's 47.73s (24% faster)
+make plot-pqqa-vs-ga   # figures/pqqa_vs_ga_pareto_L10_hard.png
 ```
 
 ### 7.1 Verified output (this fork, NVIDIA B200, $M = 2^{13}$)

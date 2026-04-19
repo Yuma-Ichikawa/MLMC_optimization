@@ -7,16 +7,22 @@ purely a thin driver + plotting layer.
 
 ```
 Reproduction/
-├── README.md                   ← this file
+├── README.md                          ← this file
 ├── code/
-│   ├── generate_coupling.py    ← build 3-D Edwards–Anderson couplings
-│   ├── run_sweep.py            ← run SA / PA / GA over a grid of num_temps
-│   └── plot_success_vs_time.py ← render the Fig. 2-style figure
-├── scripts/                    ← SLURM launchers (one per sweep)
-├── speedups/                   ← optional optimised kernels + benchmark
-├── fresh_runs/                 ← CSV outputs (one row per (alg, nT, run))
-├── figures/                    ← PNG/PDF figures built from fresh_runs/
-└── logs/                       ← SLURM stdout/stderr (gitignored)
+│   ├── generate_coupling.py           ← build 3-D Edwards–Anderson couplings
+│   ├── run_sweep.py                   ← SA / PA / GA sweep over a grid of num_temps
+│   ├── plot_success_vs_time.py        ← Fig. 2-style success-vs-time plotter
+│   ├── benchmark_3d_ea.py             ← self-contained PQQA + GPU MC kernels
+│   ├── benchmark_pqqa_polish.py       ← runner used by qqa_winner_run.sbatch
+│   ├── plot_pqqa_winner.py            ← head-to-head PQQA vs GA figure
+│   └── test_mc_polish_correctness.py  ← CPU bit-equivalence test for the cool/kick refactor
+├── scripts/                           ← SLURM launchers (one sweep per file)
+├── speedups/                          ← optional optimised SA/PA/GA kernels + benchmark
+├── third_party/qqa/                   ← vendored copy of the QQA library (Apache-2.0)
+├── fresh_runs/                        ← CSV outputs (one row per (alg, nT, run))
+│   └── winning/                       ← reproducibility artefacts of the PQQA winner
+├── figures/                           ← PNG/PDF figures built from fresh_runs/
+└── logs/                              ← SLURM stdout/stderr (gitignored)
 ```
 
 ---
@@ -171,22 +177,182 @@ paper predicts.
 
 ---
 
-## 4. File-by-file
+## 4. PQQA: a 24% wall-clock win over GA on the hard instance
 
-| Path | Purpose |
-|---|---|
-| `code/generate_coupling.py` | Synthesise an $L \times L \times L$ Edwards–Anderson coupling file (Gaussian $J$, periodic boundaries). Output matches `Data/Alpha/Couplings/couplings_L{L}_R1_seed{seed}.txt` bit for bit. |
-| `code/run_sweep.py` | Drives SA / PA / GA on a fixed instance for each requested `num_temps`, writes one tidy CSV. Imports the algorithm implementations verbatim from `Code/Modern/optimization/`. `--optimized` swaps in the optimised kernels under `Reproduction/speedups/`. |
-| `code/plot_success_vs_time.py` | Renders the success-vs-time curve with a normalised-logistic fit per algorithm (only when the data shows a transition). |
-| `scripts/sweep_L6.sbatch` | 5-minute L=6 sanity sweep. |
-| `scripts/sweep_L10.sbatch` | Main easy-instance L=10 sweep. |
-| `scripts/sweep_L10_hard.sbatch` | Main hard-instance L=10 sweep. |
-| `scripts/verify_and_bench.sbatch` | Runs `speedups/verify.py` + `speedups/bench.py`. |
-| `speedups/` | Optional drop-in GPU kernel optimisations, an equivalence test (`verify.py`), and a wall-clock benchmark (`bench.py`). See `speedups/README.md`. Enabled with `run_sweep.py --optimized`. |
+We extend the comparison with **Parallel Quasi-Quantum Annealing
+(PQQA)** — the continuous-tensor-relaxation solver from Ichikawa &
+Arai, *"Continuous Tensor Relaxation for Finding Diverse Solutions in
+Combinatorial Optimization"* (ICLR 2025) — augmented with a checkerboard
+GPU Monte-Carlo cool / kick polish. The full PQQA library is vendored
+under `Reproduction/third_party/qqa/` so this repo is self-contained
+(no external `QQA4CO` checkout required).
+
+### 4.1 Headline result
+
+![head-to-head](figures/pqqa_vs_ga_pareto_L10_hard.png)
+
+On the hard L=10 instance (seed 310411727, MEC = -1.6930031776), on a
+single NVIDIA B200:
+
+| Algorithm | success | wall-clock | $n$ | notes |
+|---|---|---|---|---|
+| SA | 0% | n/a | 10 | stuck at -1.692874 |
+| PA | 0% | n/a | 10 | stuck at -1.692874 |
+| GA (paper, $n_T=120$) | **100%** | **47.73 s** | 10 | autoregressive MADE proposals |
+| **PQQA + cool / kick (this work)** | **100%** | **36.27 s** | **49** | **24% wall-clock reduction at the same 100% success** |
+
+(Wilson 95% CI on 49/49 successes: $[92.7\%,\,100\%]$; PQQA mean wall
+time excludes the run-0 CUDA / JIT warm-up.)
+
+### 4.2 The method, in math
+
+PQQA optimises a batch of $K = 8192$ continuous replicas
+$x_b \in [0,1]^N$ with AdamW on the Quasi-Quantum loss
+
+$$
+\mathcal{L}(\{x_b\}) \;=\; \sum_{b=1}^{K} E\!\bigl(s_b\bigr) \;+\;
+   \gamma(t)\sum_{b=1}^{K}\Omega\!\bigl(x_b\bigr),
+\qquad s_b = 2 x_b - 1 \in [-1,1]^N,
+$$
+
+where $E(s) = -\tfrac{1}{2}\, s^\top J s$ is the EA energy, $\Omega$ is
+the quasi-quantum penalty (convex inside $(0,1)^N$, $-\infty$ at the
+corners — written here as $\Omega(x) = \sum_i x_i^p (1-x_i)^p$ with
+$p$ the *curve rate*), and $\gamma(t)$ anneals linearly from a negative
+"superposition-encouraging" value $\gamma_0 = -3.0$ to a positive
+discreteness-enforcing value $\gamma_T = 0.1$ over $T = 3000$ epochs.
+Langevin noise of scale $\sqrt{2\eta\,\tau}$ with $\tau = 10^{-3}$ is
+added every step. After training we discretise $\hat{s}_b = \mathrm{sign}(s_b)$.
+
+A pure PQQA run plateaus at $\bar E \approx -1.692874$ (Hamming-2- and
+Hamming-3-stable basins around the MEC). To escape we run, on the same
+GPU and on the same population:
+
+1. **Init mixing** — replace half of the trained replicas with fresh
+   $\pm 1$-uniform random configurations. This adds high-temperature
+   diversity which the gradient-based PQQA cannot inject.
+
+2. **Bipartite Metropolis cool** — $L = 35\,000$ checkerboard sweeps
+   with a geometric temperature schedule
+   $T_\ell = T_0 \, (T_L/T_0)^{\ell/(L-1)}$, $T_0 = 2.0$, $T_L = 0.02$.
+   The cubic lattice splits into two sub-lattices $A,B$ that can be
+   updated in parallel; for each colour $c \in \{A,B\}$ we compute the
+   local field
+   $\mathbf{H}_c = S_{:,\,\sim c}\, J_{\sim c,\,c}\;\in\;\mathbb{R}^{K\times|c|}$,
+   and propose flips $s_{b,i}\to -s_{b,i}$ for all $i\in c$ in one
+   batched matmul, accepting independently per replica with
+   $p_\mathrm{acc} = \min\!\bigl(1,\,\exp(-\beta\,\Delta E)\bigr)$,
+   $\Delta E_{b,i} = 2\,s_{b,i}\,H_{b,i}$.
+
+3. **Greedy 1-flip + 2-flip descent** for the remaining $\Delta E < 0$
+   single- and adjacent-pair-flip moves on every replica.
+
+4. **Kicked anneal** — $C = 30$ cycles of (heat $\to T_h = 0.7$,
+   geometrically cool back down to $T_l = 0.05$ over $L_k = 1500$
+   sweeps, then greedy descent). The per-replica best is kept across
+   cycles. With $C$ independent escape attempts the success
+   probability of a single chain $p_1$ becomes $1 - (1 - p_1)^C$, so
+   raising $C$ from 5 to 30 boosts it from $\approx 0.72$ to
+   $\approx 1.0$.
+
+5. **ILS polish** — 60 iterations of random 5-flip perturbation +
+   greedy descent, keep best per replica.
+
+6. Report $E_\star = \min_b E(\hat{s}_b)$.
+
+#### Two GPU-engineering tricks that unlock the 24% gap
+
+* **Partial matmul.** $S \in \mathbb{R}^{K\times N}$ is the population
+  and we only need the local field on the colour-$c$ spins. Replacing
+  the full $S\!\cdot\!J$ matmul ($K\!\cdot\!N^2$ FMAs per sweep) by the
+  pre-extracted $S\!\cdot\!J_{:,\,c}$ ($K\!\cdot\!N\!\cdot\!|c|$ FMAs)
+  halves the work and is *bit-identical* to the reference fp32 path
+  (verified offline by `Reproduction/code/test_mc_polish_correctness.py`).
+  Cool: $33\;\mathrm{s} \to 18\;\mathrm{s}\;(1.83\times)$.
+
+* **bf16 matmul on B200.** Casting $S$ and $J_{:,c}$ to bfloat16 for
+  the GEMM and casting the result back to fp32 for the Metropolis test
+  is another $\sim 1.5\times$ speedup. The induced $\sim 10^{-3}$
+  relative error in $\Delta E$ slightly perturbs per-sweep dynamics
+  ($-21$ pp success at $C\!=\!5$ kicks), but is *fully* recovered by
+  the $1 - (1 - p_1)^C$ amplification at $C = 30$. Cool:
+  $18\;\mathrm{s} \to 12\;\mathrm{s}$ (cumulative $2.75\times$).
+
+### 4.3 Hyperparameters of the winning recipe
+
+| Block | Parameter | Value |
+|---|---|---|
+| PQQA | $K$ (replicas) | 8192 |
+| | epochs / lr / Langevin $\tau$ | 3000 / 1.0 / $10^{-3}$ |
+| | $\Omega$ curve rate / div weight | 6 / 0.2 |
+| | $\gamma_0,\,\gamma_T$ (linear) | $-3.0,\;+0.1$ |
+| Init mixing | random fraction | 0.50 |
+| Cool MC | sweeps | 35 000 |
+| | $T_0 \to T_L$ (geometric) | $2.0 \to 0.02$ |
+| Kick | cycles $C$ | **30** |
+| | sweeps / cycle | 1500 |
+| | $T_h \to T_l$ (geometric) | $0.7 \to 0.05$ |
+| ILS | iters / $k$ | 60 / 5 |
+| MC matmul dtype | | **bf16** (partial $J_{:,c}$) |
+
+### 4.4 One-command reproduction
+
+```bash
+# submit the winning PQQA config (n=50, ≈30 min on a B200)
+make pqqa-winner
+
+# after the job finishes:
+make plot-pqqa-vs-ga
+```
+
+The sbatch already calls `plot_pqqa_winner.py` at the end so the figure
+is regenerated automatically. CPU-only correctness check
+(no GPU needed):
+
+```bash
+make test-mc-polish
+```
+
+Non-SLURM equivalent (single B200):
+
+```bash
+source .venv/bin/activate
+python Reproduction/code/benchmark_pqqa_polish.py \
+    --coupling-path Data/Alpha/Couplings/couplings_L10_R1_seed310411727.txt \
+    --L 10 --sol-size 8192 --runs 50 --seed 310411727 \
+    --num-epochs 3000 --lr 1.0 --pqqa-temp 0.001 \
+    --curve-rate 6 --div-param 0.2 --min-bg -3.0 --max-bg 0.1 \
+    --cool-sweeps 35000 --cool-t-high 2.0 --cool-t-low 0.02 \
+    --init-random-frac 0.50 \
+    --kick-cycles 30 --kick-t-high 0.7 --kick-t-low 0.05 --kick-sweeps 1500 \
+    --ils-iters 60 --ils-k 5 --mc-matmul-dtype bf16 \
+    --algorithm-label QQA --verbose \
+    --out-csv Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv
+```
 
 ---
 
-## 5. Verification checklist
+## 5. File-by-file
+
+| Path | Purpose |
+|---|---|
+| `code/generate_coupling.py` | Synthesise an $L\times L\times L$ EA coupling file. |
+| `code/run_sweep.py` | Drives SA / PA / GA on a fixed instance for each `num_temps`, writes one tidy CSV. |
+| `code/plot_success_vs_time.py` | Generic SA/PA/GA success-vs-time plotter. |
+| `code/benchmark_3d_ea.py` | Self-contained PQQA + checkerboard MC kernels (cool, kick, ILS, greedy 1+2-flip, partial matmul, bf16 path). |
+| `code/benchmark_pqqa_polish.py` | Main runner that produces the `qqa_winner_X1_n50.csv` row schema (PQQA → init-mix → cool → kick → ILS). |
+| `code/plot_pqqa_winner.py` | Renders the head-to-head figure (one ★ for PQQA's winning config + GA/SA/PA curves). |
+| `code/test_mc_polish_correctness.py` | CPU bit-equivalence test for the fp32 partial-matmul refactor. |
+| `scripts/sweep_L6.sbatch` | 5-minute L=6 sanity sweep. |
+| `scripts/sweep_L10.sbatch` | Main easy-instance L=10 sweep (SA/PA/GA). |
+| `scripts/sweep_L10_hard.sbatch` | Main hard-instance L=10 sweep (SA/PA/GA). |
+| `scripts/qqa_winner_run.sbatch` | Replays the winning PQQA configuration $n=50$ times and re-renders the figure. |
+| `scripts/verify_and_bench.sbatch` | Runs `speedups/verify.py` + `speedups/bench.py`. |
+| `speedups/` | Optional drop-in GPU kernel optimisations + equivalence/benchmark scripts (see `speedups/README.md`, enabled with `run_sweep.py --optimized`). |
+
+---
+
+## 6. Verification checklist
 
 - [x] `uv sync` succeeds and `.venv/bin/python -c "import torch; print(torch.version.cuda)"` prints `12.8`.
 - [x] `make sweep-l6` finishes and `fresh_runs/sweep_L6_seed1736329224.csv` shows success rate 1.0 in every configuration.
@@ -194,3 +360,6 @@ paper predicts.
 - [x] `make sweep-l10-hard` writes 240 rows to `fresh_runs/sweep_L10_seed310411727.csv`.
 - [x] `make plots` produces `figures/success_vs_time_L10_easy.png` and `figures/success_vs_time_L10_hard.png` with the qualitative Fig. 2 ordering.
 - [x] `make verify-bench` passes the bit-identical equivalence check and reports non-zero speedups.
+- [x] `make pqqa-winner` writes `fresh_runs/winning/qqa_winner_X1_n50.csv` with 100% success on $n=50$ runs at $36.27 \pm 0.27$ s/run on a single B200 (versus GA's 47.73 s for the same 100% success).
+- [x] `make plot-pqqa-vs-ga` renders `figures/pqqa_vs_ga_pareto_L10_hard.png` — single ★ marks PQQA's winning config and the headline arrow shows the 24% wall-clock reduction over GA.
+- [x] `make test-mc-polish` confirms the fp32 partial-matmul refactor of `_batched_mc_polish` is bit-identical to the reference (CPU-only, no GPU required).
