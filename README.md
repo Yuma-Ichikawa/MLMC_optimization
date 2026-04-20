@@ -406,7 +406,8 @@ git merge upstream/main           # or: git rebase upstream/main
 
 ## 10. Citation
 
-If you use this code, please cite the paper:
+If you use this reproduction package or its results, please cite the
+upstream paper that introduced the GA / MLMC method:
 
 ```bibtex
 @misc{delbono2025demonstratingrealadvantagemachinelearningenhanced,
@@ -417,5 +418,32 @@ If you use this code, please cite the paper:
       archivePrefix= {arXiv},
       primaryClass = {cond-mat.dis-nn},
       url          = {https://arxiv.org/abs/2510.19544}
+}
+```
+
+If you re-use the **PQQA winner** (`make pqqa-winner`,
+`Reproduction/code/benchmark_pqqa_polish.py`,
+`Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png`), please also cite
+the QQA4CO software and the companion ICLR 2025 paper that introduced
+PQQA:
+
+```bibtex
+@software{qqa4co_software,
+  author       = {Ichikawa, Yuma and Arai, Yamato},
+  title        = {QQA4CO: Quasi-Quantum Annealing for Combinatorial Optimization},
+  year         = {2025},
+  url          = {https://github.com/Yuma-Ichikawa/QQA4CO},
+  doi          = {10.5281/zenodo.19648231},
+  note         = {PyPI package: \texttt{qqa}}
+}
+
+@inproceedings{ichikawa2025pqqa,
+  author       = {Ichikawa, Yuma and Arai, Yamato},
+  title        = {Optimization by Parallel Quasi-Quantum Annealing with Gradient-Based Sampling},
+  booktitle    = {International Conference on Learning Representations (ICLR)},
+  year         = {2025},
+  url          = {https://openreview.net/forum?id=9EfBeXaXf0},
+  eprint       = {2409.02135},
+  archivePrefix= {arXiv}
 }
 ```

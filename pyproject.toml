@@ -21,6 +21,12 @@ dependencies = [
     "matplotlib>=3.9",
     "pandas>=2.2",
     "networkx>=3.3",
+    # Parallel Quasi-Quantum Annealing (PQQA) library used by the
+    # Reproduction/code/benchmark_pqqa_polish.py runner. Released by the
+    # QQA4CO project (Yuma Ichikawa & Yamato Arai, ICLR 2025) under
+    # BSD-3-Clause; see https://github.com/Yuma-Ichikawa/QQA4CO and the
+    # "Citing PQQA / QQA4CO" section in Reproduction/README.md.
+    "qqa>=0.5,<0.6",
 ]
 
 [build-system]

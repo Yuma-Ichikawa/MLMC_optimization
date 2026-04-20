@@ -29,12 +29,14 @@ import numpy as np
 import torch
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "Reproduction" / "third_party"))
 sys.path.insert(0, str(REPO_ROOT / "Reproduction" / "code"))
 sys.path.insert(0, str(REPO_ROOT / "Code" / "Legacy" / "packages"))
 sys.path.insert(0, str(REPO_ROOT / "Code" / "Modern" / "optimization"))
 
-import qqa  # noqa: E402  vendored
+# qqa (Parallel Quasi-Quantum Annealing) is installed from PyPI via
+# `pip install qqa>=0.5` (or `uv sync`). Source / paper:
+# https://github.com/Yuma-Ichikawa/QQA4CO  (Ichikawa & Arai, ICLR 2025).
+import qqa  # noqa: E402
 from qqa.callbacks import Callback, CallbackState  # noqa: E402
 
 from monte_carlo import read_couplings  # noqa: E402

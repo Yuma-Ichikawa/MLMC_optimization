@@ -18,7 +18,7 @@ Reproduction/
 │   └── test_mc_polish_correctness.py  ← CPU bit-equivalence test for the polish kernels
 ├── scripts/                           ← SLURM launchers (one sweep per file)
 ├── speedups/                          ← optional optimised SA/PA/GA kernels + benchmark
-├── third_party/qqa/                   ← vendored copy of the QQA library (Apache-2.0)
+├── third_party/                       ← pointers to upstream pip dependencies (qqa via PyPI)
 ├── fresh_runs/                        ← CSV outputs (one row per (alg, nT, run))
 │   └── winning/                       ← reproducibility artefacts of the PQQA winner
 ├── figures/                           ← PNG/PDF figures built from fresh_runs/
@@ -181,11 +181,14 @@ paper predicts.
 
 We extend the comparison with **Parallel Quasi-Quantum Annealing
 (PQQA)** — the continuous-tensor-relaxation solver from Ichikawa &
-Arai, *"Continuous Tensor Relaxation for Finding Diverse Solutions in
-Combinatorial Optimization"* (ICLR 2025) — augmented with a checkerboard
-GPU Monte-Carlo cool / kick polish. The full PQQA library is vendored
-under `Reproduction/third_party/qqa/` so this repo is self-contained
-(no external `QQA4CO` checkout required).
+Arai, *"Optimization by Parallel Quasi-Quantum Annealing with
+Gradient-Based Sampling"* (ICLR 2025) — augmented with a checkerboard
+GPU Monte-Carlo cool / kick polish. The PQQA library itself ships as
+the [`qqa`](https://pypi.org/project/qqa/) package on PyPI (released
+by the [QQA4CO](https://github.com/Yuma-Ichikawa/QQA4CO) project),
+and `pyproject.toml` pins it as a regular dependency, so a
+third-party reproducer only needs `uv sync` (or `pip install qqa>=0.5`)
+to pull it in — there is no submodule or vendored checkout.
 
 ### 4.1 Headline result
 
@@ -336,6 +339,33 @@ python Reproduction/code/benchmark_pqqa_polish.py \
     --ils-iters 2 --ils-k 5 --mc-matmul-dtype bf16 \
     --algorithm-label QQA --verbose \
     --out-csv Reproduction/fresh_runs/winning/qqa_winner_G1.csv
+```
+
+### 4.5 Citing PQQA / QQA4CO
+
+If you re-use the PQQA winner — or any part of the
+`benchmark_pqqa_polish.py` pipeline — please cite the QQA4CO software
+(concept DOI) **and** the companion ICLR 2025 paper:
+
+```bibtex
+@software{qqa4co_software,
+  author       = {Ichikawa, Yuma and Arai, Yamato},
+  title        = {QQA4CO: Quasi-Quantum Annealing for Combinatorial Optimization},
+  year         = {2025},
+  url          = {https://github.com/Yuma-Ichikawa/QQA4CO},
+  doi          = {10.5281/zenodo.19648231},
+  note         = {PyPI package: \texttt{qqa}}
+}
+
+@inproceedings{ichikawa2025pqqa,
+  author       = {Ichikawa, Yuma and Arai, Yamato},
+  title        = {Optimization by Parallel Quasi-Quantum Annealing with Gradient-Based Sampling},
+  booktitle    = {International Conference on Learning Representations (ICLR)},
+  year         = {2025},
+  url          = {https://openreview.net/forum?id=9EfBeXaXf0},
+  eprint       = {2409.02135},
+  archivePrefix= {arXiv}
+}
 ```
 
 ---
