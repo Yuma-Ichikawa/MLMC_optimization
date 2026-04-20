@@ -1,20 +1,20 @@
-"""Pure PQQA + heavy polish benchmark (no Global Annealing).
+"""PQQA + GPU Monte-Carlo polish runner.
 
-Pipeline per run:
+Pipeline per run (all stages on a single B200 GPU, on the same K=8192
+parallel replicas):
 
-    1. PQQA on the full sol_size population         (~8 s on B200)
-    2. 1-flip + 2-flip greedy descent over all replicas
-    3. (Optional) M cycles of *kicked anneal*:
-         heat with checkerboard MC cooled from T_high to T_low,
-         then re-descend, keep per-replica best
-    4. (Optional) ILS with k-flip random perturbations
-    5. Report the minimum (intensive) energy across all 8192 replicas
+    1. PQQA on the full sol_size population
+    2. Replace ``init_random_frac`` of the chains with random ±1 (diversity)
+    3. Long parallel cooling anneal (checkerboard MC, geometric T_high->T_low)
+    4. 1-flip + 2-flip greedy descent on every replica
+    5. Kicked anneal: ``kick_cycles`` cycles of (cooled-MC kick + greedy)
+    6. Short ILS safety net (k-flip perturb + greedy)
+    7. Report the minimum (intensive) energy across all replicas
 
-Wall-clock budget target: < 47.73 s (the GA(nT=120) baseline on the
-hard L=10 instance, seed 310411727, MEC = -1.6930031776).
-
-CSV schema matches benchmark_3d_ea.py / benchmark_pqqa_plus_ga.py so
-``plot_success_vs_time.py`` can pick the rows up unmodified.
+CSV schema matches benchmark_3d_ea.py so ``plot_success_vs_time.py``
+can pick the rows up unmodified. Used by qqa_winner_run.sbatch to
+reproduce the headline PQQA result against GA on the hard L=10
+instance (seed 310411727, MEC = -1.6930031776).
 """
 
 from __future__ import annotations
@@ -91,7 +91,6 @@ def run_single(
     cool_sweeps: int,
     cool_t_high: float,
     cool_t_low: float,
-    cool_n_repeats: int,
     init_random_frac: float,
     kick_cycles: int,
     kick_sweeps: int,
@@ -110,11 +109,11 @@ def run_single(
     verbose: bool,
 ) -> dict:
     qqa.fix_seed(seed + run_idx)
-    schedule = qqa.LinearBGSchedule(min_bg=min_bg, max_bg=max_bg)
     snap = _PopulationSnapshot()
 
     torch.cuda.synchronize()
     t0 = time.perf_counter()
+    schedule = qqa.LinearBGSchedule(min_bg=min_bg, max_bg=max_bg)
     qqa.anneal(
         problem,
         sol_size=sol_size,
@@ -129,79 +128,40 @@ def run_single(
         record_history=False,
         verbose=False,
     )
-    torch.cuda.synchronize()
-    t_pqqa = time.perf_counter() - t0
-
     if snap.x_disc is None:
         raise RuntimeError("PQQA snapshot failed to capture final population.")
     S = snap.x_disc.to(dtype=torch.float32, device="cuda").contiguous()
 
-    pqqa_min = float(_intensive_energy(S, J_cuda.float()).min().item())
+    # ---- Stage 1: long parallel cooling anneal on K chains ----
+    # init_random_frac > 0 replaces that fraction of the PQQA-trained
+    # population with random ±1 chains (high-T diversity that the
+    # gradient-based PQQA cannot inject).
+    if init_random_frac > 0.0:
+        K, N = S.shape
+        n_rand = int(round(K * init_random_frac))
+        if n_rand > 0:
+            g = torch.Generator(device=S.device).manual_seed(seed + run_idx + 91)
+            rand_chains = (torch.randint(
+                0, 2, (n_rand, N), device=S.device, generator=g,
+            ).to(S.dtype) * 2 - 1)
+            S[-n_rand:] = rand_chains
+    if cool_sweeps > 0:
+        _batched_mc_polish(
+            S, J_cuda.float(), color_idx,
+            n_sweeps=cool_sweeps,
+            temperature=cool_t_high, temp_end=cool_t_low,
+            seed=seed + run_idx + 13,
+            matmul_dtype=mc_matmul_dtype,
+        )
 
-    # (random-init mixing is applied per-repeat inside the cool loop below)
-
-    # ---- Stage 1: long parallel cooling anneal (no best-tracking) ----
-    # 8192 parallel SA chains, slow cool from T_high to T_low. Without
-    # per-replica best-tracking the chains can wander out of the PQQA
-    # warm basin into the true MEC basin (which the lock-in version of
-    # kicked-anneal cannot reach because each replica keeps re-starting
-    # from its own first local minimum).
-    #
-    # ``cool_n_repeats`` runs the cool stage that many times back-to-back,
-    # each with a freshly reseeded random subset (``init_random_frac``)
-    # and a different RNG. The per-repeat best (across the full pop)
-    # is tracked, so the pipeline has effectively (n_repeats × 8192)
-    # independent cooling trajectories. Wall-clock cost = n_repeats ×
-    # cool_sweeps. Use this to push success rate well above what a single
-    # cool can deliver at the same per-pipeline budget.
-    torch.cuda.synchronize()
-    t_cool_start = time.perf_counter()
-    minE_after_cool = float("inf")
-    best_S = S.clone()
-    best_E_global = float(_intensive_energy(S, J_cuda.float()).min().item())
-    for rep in range(max(cool_n_repeats, 1)):
-        S_attempt = snap.x_disc.to(dtype=torch.float32, device="cuda").contiguous()
-        if init_random_frac > 0.0:
-            K, N = S_attempt.shape
-            n_rand = int(round(K * init_random_frac))
-            if n_rand > 0:
-                g = torch.Generator(device=S_attempt.device).manual_seed(
-                    seed + run_idx + 91 + 1009 * rep)
-                rand_chains = (torch.randint(
-                    0, 2, (n_rand, N), device=S_attempt.device, generator=g,
-                ).to(S_attempt.dtype) * 2 - 1)
-                S_attempt[-n_rand:] = rand_chains
-        if cool_sweeps > 0:
-            _batched_mc_polish(
-                S_attempt, J_cuda.float(), color_idx,
-                n_sweeps=cool_sweeps,
-                temperature=cool_t_high, temp_end=cool_t_low,
-                seed=seed + run_idx + 13 + 7 * rep,
-                matmul_dtype=mc_matmul_dtype,
-            )
-        cur_min = float(_intensive_energy(S_attempt, J_cuda.float()).min().item())
-        minE_after_cool = min(minE_after_cool, cur_min)
-        if cur_min < best_E_global:
-            best_E_global = cur_min
-            best_S = S_attempt
-    S = best_S
-    torch.cuda.synchronize()
-    t_cool = time.perf_counter() - t_cool_start
-
-    torch.cuda.synchronize()
-    t1 = time.perf_counter()
+    # ---- Stage 2: greedy 1-flip + 2-flip descent ----
     _batched_single_flip(S, J_cuda.float(), max_sweeps=descent_sweeps)
     _batched_pair_flip(
         S, J_cuda.float(), rows, cols, J_bonds,
         max_sweeps=descent_sweeps, inner_sweeps=descent_sweeps,
     )
-    torch.cuda.synchronize()
-    t_greedy = time.perf_counter() - t1
 
-    minE_after_greedy = float(_intensive_energy(S, J_cuda.float()).min().item())
-
-    torch.cuda.synchronize()
-    t2 = time.perf_counter()
+    # ---- Stage 3: parallel basin-hopping with cooled-MC kicks ----
     if kick_cycles > 0:
         _batched_kicked_anneal(
             S, J_cuda.float(), rows, cols, J_bonds, color_idx,
@@ -211,13 +171,8 @@ def run_single(
             seed=seed + run_idx + 17,
             matmul_dtype=mc_matmul_dtype,
         )
-    torch.cuda.synchronize()
-    t_kick = time.perf_counter() - t2
 
-    minE_after_kick = float(_intensive_energy(S, J_cuda.float()).min().item())
-
-    torch.cuda.synchronize()
-    t3 = time.perf_counter()
+    # ---- Stage 4: short ILS safety net ----
     if ils_iters > 0:
         _batched_ils(
             S, J_cuda.float(), rows, cols, J_bonds,
@@ -225,26 +180,18 @@ def run_single(
             descent_sweeps=descent_sweeps,
             seed=seed + run_idx + 31415,
         )
+
     torch.cuda.synchronize()
-    t_ils = time.perf_counter() - t3
+    t_total = time.perf_counter() - t0
 
     energies = _intensive_energy(S, J_cuda.float())
     minE = float(energies.min().item())
     meanE = float(energies.mean().item())
-    t_total = time.perf_counter() - t0
 
     if verbose:
-        print(
-            f"  run={run_idx}  pqqa={pqqa_min:.6f}  cool={minE_after_cool:.6f}  "
-            f"greedy={minE_after_greedy:.6f}  kick={minE_after_kick:.6f}  "
-            f"final={minE:.6f}  t_pqqa={t_pqqa:.2f}s t_cool={t_cool:.2f}s "
-            f"t_greedy={t_greedy:.2f}s t_kick={t_kick:.2f}s "
-            f"t_ils={t_ils:.2f}s total={t_total:.2f}s",
-            flush=True,
-        )
+        print(f"  run={run_idx}  final={minE:.6f}  total={t_total:.2f}s", flush=True)
     return {
         "run": run_idx,
-        "pqqa_best": pqqa_min,
         "min_energy": minE,
         "mean_energy": meanE,
         "runtime_s": t_total,
@@ -270,34 +217,25 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max-bg", type=float, default=0.1)
     ap.add_argument("--curve-rate", type=int, default=6)
     ap.add_argument("--div-param", type=float, default=0.2)
-    # Polish: greedy
+    # Greedy descent
     ap.add_argument("--descent-sweeps", type=int, default=200)
-    # Polish: long parallel cooling anneal (no per-replica best-tracking)
+    # Long parallel cooling anneal
     ap.add_argument("--cool-sweeps", type=int, default=0,
-                    help="Long single-shot SA on K parallel chains. 0 = off.")
+                    help="MC sweeps for the cooling anneal. 0 = off.")
     ap.add_argument("--cool-t-high", type=float, default=2.0)
     ap.add_argument("--cool-t-low", type=float, default=0.02)
     ap.add_argument("--init-random-frac", type=float, default=0.0,
                     help="Replace this fraction of the PQQA population with "
-                         "random ±1 chains before cooling. Adds high-T "
-                         "exploration breadth at the cost of warmstart.")
-    ap.add_argument("--cool-n-repeats", type=int, default=1,
-                    help="Run the cool stage that many times back-to-back, "
-                         "each with a fresh random init/RNG. Best across "
-                         "all repeats is kept. Linearly scales runtime.")
-    # Polish: kicked anneal
-    ap.add_argument("--kick-cycles", type=int, default=20,
-                    help="Cycles of (cool-MC kick + 1+2-flip descent).")
-    ap.add_argument("--kick-sweeps", type=int, default=50,
-                    help="MC sweeps per kick (cooled from kick_t_high to kick_t_low).")
+                         "random plus/minus 1 chains before cooling.")
+    # Kicked anneal
+    ap.add_argument("--kick-cycles", type=int, default=20)
+    ap.add_argument("--kick-sweeps", type=int, default=50)
     ap.add_argument("--kick-t-high", type=float, default=1.0)
     ap.add_argument("--kick-t-low", type=float, default=0.05)
-    # Polish: ILS tail
+    # ILS tail
     ap.add_argument("--ils-iters", type=int, default=50)
     ap.add_argument("--ils-k", type=int, default=5)
-    # MC matmul dtype: bf16 -> ~2-3x faster cool/kick on B200 with no
-    # measurable change in success-rate statistics (Metropolis is robust
-    # to ~1e-3 relative error in dE).
+    # MC matmul dtype: bf16 ~ 2-3x faster cool/kick on B200.
     ap.add_argument("--mc-matmul-dtype",
                     choices=("fp32", "bf16", "fp16"), default="fp32")
     ap.add_argument("--verbose", action="store_true")
@@ -342,8 +280,10 @@ def main() -> None:
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.out_csv.open("w", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["algorithm", "num_temps", "schedule", "run",
-                         "min_energy", "mean_energy", "runtime_s"])
+        writer.writerow([
+            "algorithm", "num_temps", "schedule", "run",
+            "min_energy", "mean_energy", "runtime_s",
+        ])
         tic = time.perf_counter()
         for r in range(args.runs):
             print(f"[{r+1:>2d}/{args.runs}] {args.algorithm_label} ...", flush=True)
@@ -361,7 +301,6 @@ def main() -> None:
                 cool_sweeps=args.cool_sweeps,
                 cool_t_high=args.cool_t_high,
                 cool_t_low=args.cool_t_low,
-                cool_n_repeats=args.cool_n_repeats,
                 init_random_frac=args.init_random_frac,
                 kick_cycles=args.kick_cycles,
                 kick_sweeps=args.kick_sweeps,

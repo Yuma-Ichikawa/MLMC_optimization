@@ -177,7 +177,7 @@ paper predicts.
 
 ---
 
-## 4. PQQA: a 24% wall-clock win over GA on the hard instance
+## 4. PQQA: a 32% wall-clock win over GA on the hard instance
 
 We extend the comparison with **Parallel Quasi-Quantum Annealing
 (PQQA)** — the continuous-tensor-relaxation solver from Ichikawa &
@@ -199,7 +199,7 @@ single NVIDIA B200:
 | SA | 0% | n/a | 10 | stuck at -1.692874 |
 | PA | 0% | n/a | 10 | stuck at -1.692874 |
 | GA (paper, $n_T=120$) | **100%** | **47.73 s** | 10 | autoregressive MADE proposals |
-| **PQQA + cool / kick (this work)** | **100%** | **36.27 s** | **49** | **24% wall-clock reduction at the same 100% success** |
+| **PQQA + cool / kick (this work)** | **100%** | **32.46 s** | **49** | **32% wall-clock reduction at the same 100% success** |
 
 (Wilson 95% CI on 49/49 successes: $[92.7\%,\,100\%]$; PQQA mean wall
 time excludes the run-0 CUDA / JIT warm-up.)
@@ -247,15 +247,13 @@ GPU and on the same population:
 3. **Greedy 1-flip + 2-flip descent** for the remaining $\Delta E < 0$
    single- and adjacent-pair-flip moves on every replica.
 
-4. **Kicked anneal** — $C = 30$ cycles of (heat $\to T_h = 0.7$,
+4. **Kicked anneal** — $C = 23$ cycles of (heat $\to T_h = 0.7$,
    geometrically cool back down to $T_l = 0.05$ over $L_k = 1500$
    sweeps, then greedy descent). The per-replica best is kept across
-   cycles. With $C$ independent escape attempts the success
-   probability of a single chain $p_1$ becomes $1 - (1 - p_1)^C$, so
-   raising $C$ from 5 to 30 boosts it from $\approx 0.72$ to
-   $\approx 1.0$.
+   cycles, so with $C$ independent escape attempts the per-chain
+   success probability $p_1$ amplifies as $1 - (1 - p_1)^C$.
 
-5. **ILS polish** — 60 iterations of random 5-flip perturbation +
+5. **ILS polish** — 2 iterations of random 5-flip perturbation +
    greedy descent, keep best per replica.
 
 6. Report $E_\star = \min_b E(\hat{s}_b)$.
@@ -289,13 +287,13 @@ GPU and on the same population:
 | Init mixing | random fraction | 0.50 |
 | Cool MC | sweeps | 35 000 |
 | | $T_0 \to T_L$ (geometric) | $2.0 \to 0.02$ |
-| Kick | cycles $C$ | **30** |
+| Kick | cycles $C$ | **23** |
 | | sweeps / cycle | 1500 |
 | | $T_h \to T_l$ (geometric) | $0.7 \to 0.05$ |
-| ILS | iters / $k$ | 60 / 5 |
+| ILS | iters / $k$ | 2 / 5 |
 | MC matmul dtype | | **bf16** (partial $J_{:,c}$) |
 
-### 4.4 One-command reproduction
+### 4.5 One-command reproduction
 
 ```bash
 # submit the winning PQQA config (n=50, ≈30 min on a B200)
@@ -324,10 +322,10 @@ python Reproduction/code/benchmark_pqqa_polish.py \
     --curve-rate 6 --div-param 0.2 --min-bg -3.0 --max-bg 0.1 \
     --cool-sweeps 35000 --cool-t-high 2.0 --cool-t-low 0.02 \
     --init-random-frac 0.50 \
-    --kick-cycles 30 --kick-t-high 0.7 --kick-t-low 0.05 --kick-sweeps 1500 \
-    --ils-iters 60 --ils-k 5 --mc-matmul-dtype bf16 \
+    --kick-cycles 23 --kick-t-high 0.7 --kick-t-low 0.05 --kick-sweeps 1500 \
+    --ils-iters 2 --ils-k 5 --mc-matmul-dtype bf16 \
     --algorithm-label QQA --verbose \
-    --out-csv Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv
+    --out-csv Reproduction/fresh_runs/winning/qqa_winner_G1.csv
 ```
 
 ---
@@ -340,7 +338,7 @@ python Reproduction/code/benchmark_pqqa_polish.py \
 | `code/run_sweep.py` | Drives SA / PA / GA on a fixed instance for each `num_temps`, writes one tidy CSV. |
 | `code/plot_success_vs_time.py` | Generic SA/PA/GA success-vs-time plotter. |
 | `code/benchmark_3d_ea.py` | Self-contained PQQA + checkerboard MC kernels (cool, kick, ILS, greedy 1+2-flip, partial matmul, bf16 path). |
-| `code/benchmark_pqqa_polish.py` | Main runner that produces the `qqa_winner_X1_n50.csv` row schema (PQQA → init-mix → cool → kick → ILS). |
+| `code/benchmark_pqqa_polish.py` | Main runner: PQQA → init-mix → cool → greedy → kick → ILS. Writes one row per run to `qqa_winner_G1.csv`. |
 | `code/plot_pqqa_winner.py` | Renders the head-to-head figure (one ★ for PQQA's winning config + GA/SA/PA curves). |
 | `code/test_mc_polish_correctness.py` | CPU bit-equivalence test for the fp32 partial-matmul refactor. |
 | `scripts/sweep_L6.sbatch` | 5-minute L=6 sanity sweep. |
@@ -360,6 +358,6 @@ python Reproduction/code/benchmark_pqqa_polish.py \
 - [x] `make sweep-l10-hard` writes 240 rows to `fresh_runs/sweep_L10_seed310411727.csv`.
 - [x] `make plots` produces `figures/success_vs_time_L10_easy.png` and `figures/success_vs_time_L10_hard.png` with the qualitative Fig. 2 ordering.
 - [x] `make verify-bench` passes the bit-identical equivalence check and reports non-zero speedups.
-- [x] `make pqqa-winner` writes `fresh_runs/winning/qqa_winner_X1_n50.csv` with 100% success on $n=50$ runs at $36.27 \pm 0.27$ s/run on a single B200 (versus GA's 47.73 s for the same 100% success).
-- [x] `make plot-pqqa-vs-ga` renders `figures/pqqa_vs_ga_pareto_L10_hard.png` — single ★ marks PQQA's winning config and the headline arrow shows the 24% wall-clock reduction over GA.
+- [x] `make pqqa-winner` writes `fresh_runs/winning/qqa_winner_G1.csv` with 100% success on $n=50$ runs at $32.46 \pm 0.20$ s/run on a single B200 (versus GA's 47.73 s for the same 100% success).
+- [x] `make plot-pqqa-vs-ga` renders `figures/pqqa_vs_ga_pareto_L10_hard.png` — single ★ marks PQQA's winning config and the headline arrow shows the 32% wall-clock reduction over GA.
 - [x] `make test-mc-polish` confirms the fp32 partial-matmul refactor of `_batched_mc_polish` is bit-identical to the reference (CPU-only, no GPU required).

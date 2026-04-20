@@ -7,7 +7,7 @@ EASY_SEED := 1736329224
 HARD_SEED := 310411727
 EASY_CSV := Reproduction/fresh_runs/sweep_L10_seed$(EASY_SEED).csv
 HARD_CSV := Reproduction/fresh_runs/sweep_L10_seed$(HARD_SEED).csv
-PQQA_CSV := Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv
+PQQA_CSV := Reproduction/fresh_runs/winning/qqa_winner_G1.csv
 
 .PHONY: help install smoke sweep-l6 sweep-l10-easy sweep-l10-hard \
         sweep-l10-all verify-bench plot-easy plot-hard plots clean-figures \
@@ -29,7 +29,7 @@ help:
 	@echo
 	@echo "  --- PQQA (Parallel Quasi-Quantum Annealing) winner ----"
 	@echo "  make pqqa-winner      submit the winning PQQA config (n=50, ~30 min)"
-	@echo "                        100% success @ 36.27 s vs GA's 47.73 s"
+	@echo "                        100% success @ 32.46 s vs GA's 47.73 s (32% faster)"
 	@echo "  make plot-pqqa-vs-ga  render figures/pqqa_vs_ga_pareto_L10_hard.png"
 	@echo "  make test-mc-polish   CPU bit-equivalence test for the fp32 path"
 	@echo

@@ -19,7 +19,7 @@ Usage::
 
     python Reproduction/code/plot_pqqa_winner.py \\
         --baseline-csv Reproduction/fresh_runs/sweep_L10_seed310411727.csv \\
-        --winner-csv   Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv \\
+        --winner-csv   Reproduction/fresh_runs/winning/qqa_winner_G1.csv \\
         --out          Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png
 """
 from __future__ import annotations

@@ -301,7 +301,7 @@ make plots             # figures/success_vs_time_L10_{easy,hard}.png
 
 # Beat GA on the hard instance with Parallel Quasi-Quantum Annealing (PQQA).
 # See Reproduction/README.md §4 for the full story, math, and hyperparameters.
-make pqqa-winner       # 100% success @ 36.27s vs GA's 47.73s (24% faster)
+make pqqa-winner       # 100% success @ 32.46s vs GA's 47.73s (32% faster)
 make plot-pqqa-vs-ga   # figures/pqqa_vs_ga_pareto_L10_hard.png
 ```
 

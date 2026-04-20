@@ -372,7 +372,6 @@ def _batched_kicked_anneal(
     """
     if n_cycles <= 0 or kick_sweeps <= 0:
         return S
-    K, N = S.shape
     with torch.no_grad():
         H = S @ J
         best_E = -0.5 * (S * H).sum(dim=1)

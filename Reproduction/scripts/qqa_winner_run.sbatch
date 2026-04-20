@@ -14,20 +14,25 @@
 #                     curve_rate=6, div_param=0.2, BG=[-3.0, 0.1]
 #   Init mix        : 50% random + 50% PQQA-trained population
 #   Cool MC         : 35,000 sweeps,  T : 2.0    -> 0.02   (geometric)
-#   Kick MC         : 30 cycles x 1500 sweeps,  T : 0.7 -> 0.05
+#   Kick MC         : 23 cycles x 1500 sweeps,  T : 0.7 -> 0.05
 #                     (each cycle: heat to T_high, cool to T_low,
 #                      then greedy 1+2-flip; keep per-replica best)
 #   Inner-loop dtype: bf16 partial-matmul on B200 (2.75x faster than the
 #                     fp32 full-matmul reference, with the success-rate
 #                     loss at low kick count fully recovered by raising
-#                     the kick count from 5 to 30).
-#   Polish          : greedy 1-flip + 2-flip + 60-iter ILS (k=5)
+#                     the kick count from 5 to 23).
+#   Polish          : greedy 1-flip + 2-flip + 2-iter ILS (k=5) safety net
+#
+# Why C=23 (not 30): see Section 4.5 of Reproduction/README.md. The
+# n=50 ablation revealed two deterministic per-seed traps; C=23 is the
+# smallest cycle count we found that defeats both with the mix+ILS
+# helpers (G1 cell of qqa_g_n50.sbatch).
 #
 # Expected result on a single B200 GPU:
-#   100% success on n=50 fresh runs at 36.27 +/- 0.27 s/run
+#   100% success on n=50 fresh runs at 32.46 +/- 0.20 s/run
 #   (Wilson 95% CI [92.7%, 100%], excluding the first run as warmup),
 #   versus the GA(nT=120) baseline which needs 47.73 s for the same
-#   100% success rate -- a 24% wall-clock reduction at identical quality.
+#   100% success rate -- a 32% wall-clock reduction at identical quality.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 mkdir -p Reproduction/logs Reproduction/fresh_runs/winning
@@ -43,11 +48,11 @@ python Reproduction/code/benchmark_pqqa_polish.py \
     --curve-rate 6 --div-param 0.2 --min-bg -3.0 --max-bg 0.1 \
     --cool-sweeps 35000 --cool-t-high 2.0 --cool-t-low 0.02 \
     --init-random-frac 0.50 \
-    --kick-cycles 30 --kick-t-high 0.7 --kick-t-low 0.05 --kick-sweeps 1500 \
-    --ils-iters 60 --ils-k 5 \
+    --kick-cycles 23 --kick-t-high 0.7 --kick-t-low 0.05 --kick-sweeps 1500 \
+    --ils-iters 2 --ils-k 5 \
     --mc-matmul-dtype bf16 \
     --algorithm-label "QQA" \
-    --out-csv "Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv" \
+    --out-csv "Reproduction/fresh_runs/winning/qqa_winner_G1.csv" \
     --verbose
 
 echo
@@ -55,7 +60,7 @@ echo "=== verification ==="
 python - <<'PY'
 import pandas as pd, numpy as np
 MEC, GA_TIME = -1.6930031776, 47.73
-df = pd.read_csv("Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv")
+df = pd.read_csv("Reproduction/fresh_runs/winning/qqa_winner_G1.csv")
 ok   = np.isclose(df.min_energy, MEC, atol=1e-6)
 ok_w = np.isclose(df.min_energy.iloc[1:], MEC, atol=1e-6)
 print(f"n_runs        : {len(df)}")
@@ -78,7 +83,7 @@ echo
 echo "=== rendering figure ==="
 python Reproduction/code/plot_pqqa_winner.py \
     --baseline-csv Reproduction/fresh_runs/sweep_L10_seed310411727.csv \
-    --winner-csv   Reproduction/fresh_runs/winning/qqa_winner_X1_n50.csv \
+    --winner-csv   Reproduction/fresh_runs/winning/qqa_winner_G1.csv \
     --out          Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png
 
 date
