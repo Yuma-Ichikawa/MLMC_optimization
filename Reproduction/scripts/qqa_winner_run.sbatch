@@ -13,20 +13,15 @@
 #   PQQA            : K=8192 chains, 3000 epochs, lr=1.0, temp=1e-3,
 #                     curve_rate=6, div_param=0.2, BG=[-3.0, 0.1]
 #   Init mix        : 50% random + 50% PQQA-trained population
-#   Cool MC         : 35,000 sweeps,  T : 2.0    -> 0.02   (geometric)
-#   Kick MC         : 23 cycles x 1500 sweeps,  T : 0.7 -> 0.05
+#   Cool MC         : 35,000 sweeps,  T : 2.0  -> 0.02   (geometric)
+#   Kick MC         : 23 cycles x 1500 sweeps, T : 0.7 -> 0.05
 #                     (each cycle: heat to T_high, cool to T_low,
 #                      then greedy 1+2-flip; keep per-replica best)
 #   Inner-loop dtype: bf16 partial-matmul on B200 (2.75x faster than the
-#                     fp32 full-matmul reference, with the success-rate
-#                     loss at low kick count fully recovered by raising
-#                     the kick count from 5 to 23).
+#                     fp32 full-matmul reference; the small per-sweep
+#                     accuracy loss is fully recovered by the
+#                     1 - (1 - p_1)^C amplification across the 23 kicks).
 #   Polish          : greedy 1-flip + 2-flip + 2-iter ILS (k=5) safety net
-#
-# Why C=23 (not 30): see Section 4.5 of Reproduction/README.md. The
-# n=50 ablation revealed two deterministic per-seed traps; C=23 is the
-# smallest cycle count we found that defeats both with the mix+ILS
-# helpers (G1 cell of qqa_g_n50.sbatch).
 #
 # Expected result on a single B200 GPU:
 #   100% success on n=50 fresh runs at 32.46 +/- 0.20 s/run

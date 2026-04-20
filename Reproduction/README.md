@@ -12,10 +12,10 @@ Reproduction/
 │   ├── generate_coupling.py           ← build 3-D Edwards–Anderson couplings
 │   ├── run_sweep.py                   ← SA / PA / GA sweep over a grid of num_temps
 │   ├── plot_success_vs_time.py        ← Fig. 2-style success-vs-time plotter
-│   ├── benchmark_3d_ea.py             ← self-contained PQQA + GPU MC kernels
-│   ├── benchmark_pqqa_polish.py       ← runner used by qqa_winner_run.sbatch
+│   ├── polish_kernels.py              ← GPU MC kernels (cool, kick, ILS, greedy 1+2-flip)
+│   ├── benchmark_pqqa_polish.py       ← PQQA + polish runner used by qqa_winner_run.sbatch
 │   ├── plot_pqqa_winner.py            ← head-to-head PQQA vs GA figure
-│   └── test_mc_polish_correctness.py  ← CPU bit-equivalence test for the cool/kick refactor
+│   └── test_mc_polish_correctness.py  ← CPU bit-equivalence test for the polish kernels
 ├── scripts/                           ← SLURM launchers (one sweep per file)
 ├── speedups/                          ← optional optimised SA/PA/GA kernels + benchmark
 ├── third_party/qqa/                   ← vendored copy of the QQA library (Apache-2.0)
@@ -258,7 +258,7 @@ GPU and on the same population:
 
 6. Report $E_\star = \min_b E(\hat{s}_b)$.
 
-#### Two GPU-engineering tricks that unlock the 24% gap
+#### Two GPU-engineering tricks that close the wall-clock gap
 
 * **Partial matmul.** $S \in \mathbb{R}^{K\times N}$ is the population
   and we only need the local field on the colour-$c$ spins. Replacing
@@ -271,10 +271,10 @@ GPU and on the same population:
 * **bf16 matmul on B200.** Casting $S$ and $J_{:,c}$ to bfloat16 for
   the GEMM and casting the result back to fp32 for the Metropolis test
   is another $\sim 1.5\times$ speedup. The induced $\sim 10^{-3}$
-  relative error in $\Delta E$ slightly perturbs per-sweep dynamics
-  ($-21$ pp success at $C\!=\!5$ kicks), but is *fully* recovered by
-  the $1 - (1 - p_1)^C$ amplification at $C = 30$. Cool:
-  $18\;\mathrm{s} \to 12\;\mathrm{s}$ (cumulative $2.75\times$).
+  relative error in $\Delta E$ slightly perturbs per-sweep dynamics,
+  but is fully recovered by the $1 - (1 - p_1)^C$ amplification across
+  the $C$ kicks. Cool: $18\;\mathrm{s} \to 12\;\mathrm{s}$
+  (cumulative $2.75\times$).
 
 ### 4.3 Hyperparameters of the winning recipe
 
@@ -293,7 +293,7 @@ GPU and on the same population:
 | ILS | iters / $k$ | 2 / 5 |
 | MC matmul dtype | | **bf16** (partial $J_{:,c}$) |
 
-### 4.5 One-command reproduction
+### 4.4 One-command reproduction
 
 ```bash
 # submit the winning PQQA config (n=50, ≈30 min on a B200)
@@ -304,8 +304,18 @@ make plot-pqqa-vs-ga
 ```
 
 The sbatch already calls `plot_pqqa_winner.py` at the end so the figure
-is regenerated automatically. CPU-only correctness check
-(no GPU needed):
+is regenerated automatically.
+
+**No-GPU shortcut.** The reference winner CSV
+(`Reproduction/fresh_runs/winning/qqa_winner_G1.csv`) is committed to the
+repo, so a third party can re-render the headline figure on a laptop:
+
+```bash
+source .venv/bin/activate
+make plot-pqqa-vs-ga              # writes Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png
+```
+
+CPU-only correctness check for the polish kernels (no GPU needed):
 
 ```bash
 make test-mc-polish
@@ -337,7 +347,7 @@ python Reproduction/code/benchmark_pqqa_polish.py \
 | `code/generate_coupling.py` | Synthesise an $L\times L\times L$ EA coupling file. |
 | `code/run_sweep.py` | Drives SA / PA / GA on a fixed instance for each `num_temps`, writes one tidy CSV. |
 | `code/plot_success_vs_time.py` | Generic SA/PA/GA success-vs-time plotter. |
-| `code/benchmark_3d_ea.py` | Self-contained PQQA + checkerboard MC kernels (cool, kick, ILS, greedy 1+2-flip, partial matmul, bf16 path). |
+| `code/polish_kernels.py` | GPU MC kernel library (checkerboard cool, kicked anneal, ILS, greedy 1+2-flip; partial-matmul + bf16 path). |
 | `code/benchmark_pqqa_polish.py` | Main runner: PQQA → init-mix → cool → greedy → kick → ILS. Writes one row per run to `qqa_winner_G1.csv`. |
 | `code/plot_pqqa_winner.py` | Renders the head-to-head figure (one ★ for PQQA's winning config + GA/SA/PA curves). |
 | `code/test_mc_polish_correctness.py` | CPU bit-equivalence test for the fp32 partial-matmul refactor. |

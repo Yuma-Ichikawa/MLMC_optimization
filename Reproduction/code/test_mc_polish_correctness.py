@@ -17,7 +17,7 @@ _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 
 # import the new implementation
-from benchmark_3d_ea import _batched_mc_polish, _bipartite_coloring
+from polish_kernels import _batched_mc_polish, _bipartite_coloring
 
 
 def _reference_mc_polish(S, J, color_idx, *, n_sweeps, temperature,

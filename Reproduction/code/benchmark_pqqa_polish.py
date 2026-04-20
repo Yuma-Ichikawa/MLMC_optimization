@@ -38,7 +38,7 @@ import qqa  # noqa: E402  vendored
 from qqa.callbacks import Callback, CallbackState  # noqa: E402
 
 from monte_carlo import read_couplings  # noqa: E402
-from benchmark_3d_ea import (  # noqa: E402
+from polish_kernels import (  # noqa: E402
     _bipartite_coloring,
     _build_bond_tensors,
     _batched_single_flip,

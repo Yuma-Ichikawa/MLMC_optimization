@@ -292,7 +292,9 @@ runs used as ground truth.
 This fork deliberately ships **no pre-rendered figures**. The
 `Reproduction/` directory contains a self-contained pipeline that
 rebuilds the paper's **Fig. 2** from fresh simulation output on a
-single GPU. A top-level `Makefile` wraps every step:
+single GPU and adds a head-to-head comparison against
+**Parallel Quasi-Quantum Annealing (PQQA)** on the hard instance.
+A top-level `Makefile` wraps every step:
 
 ```bash
 make sweep-l10-all     # easy (seed 1736329224) + hard (seed 310411727)
@@ -304,6 +306,20 @@ make plots             # figures/success_vs_time_L10_{easy,hard}.png
 make pqqa-winner       # 100% success @ 32.46s vs GA's 47.73s (32% faster)
 make plot-pqqa-vs-ga   # figures/pqqa_vs_ga_pareto_L10_hard.png
 ```
+
+### 7.0 Headline result: PQQA beats GA on the hard instance
+
+![PQQA vs GA pareto](Reproduction/figures/pqqa_vs_ga_pareto_L10_hard.png)
+
+On the L=10 hard instance (seed 310411727, MEC = $-1.6930031776$) we
+reproduce 100% success with PQQA + a checkerboard MC cool / kick polish
+in **32.46 s** of mean wall-clock time per run (n=49 after dropping the
+warm-up run; Wilson 95% CI $[92.7\%, 100\%]$), versus GA's **47.73 s**
+for the same 100% success rate. SA and PA never reach the MEC at this
+population size. The figure is rendered by
+`make plot-pqqa-vs-ga` from `Reproduction/fresh_runs/winning/qqa_winner_G1.csv`.
+See `Reproduction/README.md` §4 for the math, hyperparameters and the
+single-command reproducer.
 
 ### 7.1 Verified output (this fork, NVIDIA B200, $M = 2^{13}$)
 
