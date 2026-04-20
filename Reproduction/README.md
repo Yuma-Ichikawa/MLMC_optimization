@@ -324,6 +324,22 @@ CPU-only correctness check for the polish kernels (no GPU needed):
 make test-mc-polish
 ```
 
+**PyPI reproducibility receipt (B200, fresh `uv sync`).**
+A full GPU rerun of the recipe above, executed with the PyPI
+release `qqa==0.5.0` (no vendored copy on the path), reproduces the
+headline numbers within sampling noise:
+
+| run | success (excl. warm-up) | mean wall-clock | speedup vs GA |
+|---|---|---|---|
+| reference (`qqa_winner_G1.csv`) | 49/49 = 100% | 32.46 s | 32.0% faster |
+| PyPI rerun (`qqa_winner_G1_rerun.csv`) | 49/49 = 100% | 31.88 s | 33.2% faster |
+
+The rerun CSV (`Reproduction/fresh_runs/winning/qqa_winner_G1_rerun.csv`)
+and the corresponding figure
+(`Reproduction/figures/pqqa_vs_ga_pareto_L10_hard_rerun.png`) are
+committed alongside the originals as a third-party reproducibility
+receipt; the original headline artefacts are kept untouched.
+
 Non-SLURM equivalent (single B200):
 
 ```bash
