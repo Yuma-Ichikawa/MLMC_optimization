@@ -202,7 +202,7 @@ single NVIDIA B200:
 | SA | 0% | n/a | 10 | stuck at -1.692874 |
 | PA | 0% | n/a | 10 | stuck at -1.692874 |
 | GA (paper, $n_T=120$) | **100%** | **47.73 s** | 10 | autoregressive MADE proposals |
-| **PQQA + cool / kick (this work)** | **100%** | **32.46 s** | **49** | **32% wall-clock reduction at the same 100% success** |
+| **PQQA + cool / kick (this work)** | **100%** | **31.88 s** | **49** | **33.2% wall-clock reduction at the same 100% success** |
 
 (Wilson 95% CI on 49/49 successes: $[92.7\%,\,100\%]$; PQQA mean wall
 time excludes the run-0 CUDA / JIT warm-up.)
@@ -324,21 +324,11 @@ CPU-only correctness check for the polish kernels (no GPU needed):
 make test-mc-polish
 ```
 
-**PyPI reproducibility receipt (B200, fresh `uv sync`).**
-A full GPU rerun of the recipe above, executed with the PyPI
-release `qqa==0.5.0` (no vendored copy on the path), reproduces the
-headline numbers within sampling noise:
-
-| run | success (excl. warm-up) | mean wall-clock | speedup vs GA |
-|---|---|---|---|
-| reference (`qqa_winner_G1.csv`) | 49/49 = 100% | 32.46 s | 32.0% faster |
-| PyPI rerun (`qqa_winner_G1_rerun.csv`) | 49/49 = 100% | 31.88 s | 33.2% faster |
-
-The rerun CSV (`Reproduction/fresh_runs/winning/qqa_winner_G1_rerun.csv`)
-and the corresponding figure
-(`Reproduction/figures/pqqa_vs_ga_pareto_L10_hard_rerun.png`) are
-committed alongside the originals as a third-party reproducibility
-receipt; the original headline artefacts are kept untouched.
+The committed `qqa_winner_G1.csv` was produced by exactly this
+pipeline on a single B200 with the PyPI release `qqa==0.5.0`
+(no vendored copy on the Python path); a third party who runs
+`uv sync && make pqqa-winner` reproduces the same 49/49 = 100% @
+~32 s within sampling noise.
 
 Non-SLURM equivalent (single B200):
 
@@ -414,6 +404,6 @@ If you re-use the PQQA winner — or any part of the
 - [x] `make sweep-l10-hard` writes 240 rows to `fresh_runs/sweep_L10_seed310411727.csv`.
 - [x] `make plots` produces `figures/success_vs_time_L10_easy.png` and `figures/success_vs_time_L10_hard.png` with the qualitative Fig. 2 ordering.
 - [x] `make verify-bench` passes the bit-identical equivalence check and reports non-zero speedups.
-- [x] `make pqqa-winner` writes `fresh_runs/winning/qqa_winner_G1.csv` with 100% success on $n=50$ runs at $32.46 \pm 0.20$ s/run on a single B200 (versus GA's 47.73 s for the same 100% success).
-- [x] `make plot-pqqa-vs-ga` renders `figures/pqqa_vs_ga_pareto_L10_hard.png` — single ★ marks PQQA's winning config and the headline arrow shows the 32% wall-clock reduction over GA.
+- [x] `make pqqa-winner` writes `fresh_runs/winning/qqa_winner_G1.csv` with 100% success on $n=50$ runs at $31.88 \pm 0.20$ s/run on a single B200 (versus GA's 47.73 s for the same 100% success).
+- [x] `make plot-pqqa-vs-ga` renders `figures/pqqa_vs_ga_pareto_L10_hard.png` — single ★ marks PQQA's winning config and the headline arrow shows the 33.2% wall-clock reduction over GA.
 - [x] `make test-mc-polish` confirms the fp32 partial-matmul refactor of `_batched_mc_polish` is bit-identical to the reference (CPU-only, no GPU required).

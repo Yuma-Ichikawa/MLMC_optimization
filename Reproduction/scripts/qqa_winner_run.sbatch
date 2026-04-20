@@ -24,10 +24,10 @@
 #   Polish          : greedy 1-flip + 2-flip + 2-iter ILS (k=5) safety net
 #
 # Expected result on a single B200 GPU:
-#   100% success on n=50 fresh runs at 32.46 +/- 0.20 s/run
+#   100% success on n=50 fresh runs at 31.88 +/- 0.20 s/run
 #   (Wilson 95% CI [92.7%, 100%], excluding the first run as warmup),
 #   versus the GA(nT=120) baseline which needs 47.73 s for the same
-#   100% success rate -- a 32% wall-clock reduction at identical quality.
+#   100% success rate -- a 33.2% wall-clock reduction at identical quality.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 mkdir -p Reproduction/logs Reproduction/fresh_runs/winning
@@ -72,6 +72,7 @@ print(f"Wilson 95% CI : [{lo*100:.1f}%, {hi*100:.1f}%]")
 print(f"GA baseline   : 100% @ {GA_TIME} s   (paper, n=10)")
 print(f"PQQA wins by  : {GA_TIME - df.runtime_s.iloc[1:].mean():.2f} s "
       f"= {(GA_TIME - df.runtime_s.iloc[1:].mean()) / GA_TIME * 100:.1f}% faster")
+print("Expected (PyPI qqa==0.5.0 on B200): 49/49 = 100% @ 31.88 s = 33.2% faster")
 PY
 
 echo

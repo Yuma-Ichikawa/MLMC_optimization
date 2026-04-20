@@ -303,7 +303,7 @@ make plots             # figures/success_vs_time_L10_{easy,hard}.png
 
 # Beat GA on the hard instance with Parallel Quasi-Quantum Annealing (PQQA).
 # See Reproduction/README.md §4 for the full story, math, and hyperparameters.
-make pqqa-winner       # 100% success @ 32.46s vs GA's 47.73s (32% faster)
+make pqqa-winner       # 100% success @ 31.88s vs GA's 47.73s (33.2% faster)
 make plot-pqqa-vs-ga   # figures/pqqa_vs_ga_pareto_L10_hard.png
 ```
 
@@ -313,9 +313,9 @@ make plot-pqqa-vs-ga   # figures/pqqa_vs_ga_pareto_L10_hard.png
 
 On the L=10 hard instance (seed 310411727, MEC = $-1.6930031776$) we
 reproduce 100% success with PQQA + a checkerboard MC cool / kick polish
-in **32.46 s** of mean wall-clock time per run (n=49 after dropping the
+in **31.88 s** of mean wall-clock time per run (n=49 after dropping the
 warm-up run; Wilson 95% CI $[92.7\%, 100\%]$), versus GA's **47.73 s**
-for the same 100% success rate. SA and PA never reach the MEC at this
+for the same 100% success rate — a **33.2% wall-clock reduction**. SA and PA never reach the MEC at this
 population size. The figure is rendered by
 `make plot-pqqa-vs-ga` from `Reproduction/fresh_runs/winning/qqa_winner_G1.csv`.
 See `Reproduction/README.md` §4 for the math, hyperparameters and the

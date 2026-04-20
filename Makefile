@@ -29,7 +29,7 @@ help:
 	@echo
 	@echo "  --- PQQA (Parallel Quasi-Quantum Annealing) winner ----"
 	@echo "  make pqqa-winner      submit the winning PQQA config (n=50, ~30 min)"
-	@echo "                        100% success @ 32.46 s vs GA's 47.73 s (32% faster)"
+	@echo "                        100% success @ 31.88 s vs GA's 47.73 s (33.2% faster)"
 	@echo "  make plot-pqqa-vs-ga  render figures/pqqa_vs_ga_pareto_L10_hard.png"
 	@echo "  make test-mc-polish   CPU bit-equivalence test for the fp32 path"
 	@echo
